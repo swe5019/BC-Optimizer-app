@@ -26,22 +26,13 @@ if 'matchups' not in st.session_state:
 def get_available(pool, used):
     return [p for p in pool if p[0] not in used]
 
-def pairing_score(pair_sent, pair_counter, alpha=1.0, beta=0.75):
+def pairing_score(pair_sent, pair_counter, alpha=2.0, beta=0.2):
+    # Strongly punish poor handicap matchups
     avg_sent = sum(p[1] for p in pair_sent) / 2
     avg_counter = sum(p[1] for p in pair_counter) / 2
-    avg_diff = abs(avg_sent - avg_counter)
+    avg_diff_sq = (avg_sent - avg_counter) ** 2
     balance = abs(pair_counter[0][1] - pair_counter[1][1])
-    return alpha * avg_diff - beta * balance
-
-def get_best_pair(pool, used):
-    best_spread = -1
-    best_pair = None
-    for a, b in combinations(get_available(pool, used), 2):
-        spread = abs(a[1] - b[1])
-        if spread > best_spread:
-            best_spread = spread
-            best_pair = (a, b)
-    return best_pair
+    return alpha * avg_diff_sq + beta * balance
 
 def get_best_counter(sent, pool, used):
     best_score = float('inf')
