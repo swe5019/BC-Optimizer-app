@@ -21,13 +21,6 @@ if 'round' not in st.session_state:
     st.session_state.round = 1
 if 'matchups' not in st.session_state:
     st.session_state.matchups = []
-if 'changed' not in st.session_state:
-    st.session_state.changed = False
-
-# Prevent early rerun errors; rerun is now handled after user actions
-if st.session_state.changed:
-    st.session_state.changed = False
-    st.stop()
 
 # ========== HELPER FUNCTIONS ==========
 def get_available(pool, used):
@@ -74,7 +67,7 @@ if st.session_state.round > 4:
         st.write(f"🔹 **{match['sender_team']}** sent: {format_pair(match['sent'])}")
         st.write(f"🔸 **{match['counter_team']}** countered: {format_pair(match['counter'])}")
     if st.button("🔁 Reset Draft"):
-        for key in ['used_a', 'used_b', 'round', 'matchups', 'changed']:
+        for key in ['used_a', 'used_b', 'round', 'matchups']:
             st.session_state.pop(key, None)
         st.rerun()
     st.stop()
@@ -92,8 +85,8 @@ used_recv = st.session_state.used_b if sender == "Atown" else st.session_state.u
 st.markdown(f"### {sender} - Send Out a Pairing")
 avail_send = get_available(pool_send, used_send)
 p1 = st.selectbox("Choose first player", [p[0] for p in avail_send], key=f"{sender}_1")
-p2_options = [p[0] for p in avail_send if p[0] != p1]
-p2 = st.selectbox("Choose second player", p2_options, key=f"{sender}_2")
+p2_options = [p for p in avail_send if p[0] != p1]
+p2 = st.selectbox("Choose second player", [p[0] for p in p2_options], key=f"{sender}_2")
 
 if p1 and p2:
     sent_pair = [p for p in pool_send if p[0] in (p1, p2)]
@@ -110,8 +103,8 @@ if p1 and p2:
     st.markdown(f"### {receiver} - Override or Confirm Counter Pairing")
     avail_recv = get_available(pool_recv, used_recv)
     c1 = st.selectbox("Choose first counter player", [p[0] for p in avail_recv], key=f"{receiver}_1")
-    c2_options = [p[0] for p in avail_recv if p[0] != c1]
-    c2 = st.selectbox("Choose second counter player", c2_options, key=f"{receiver}_2")
+    c2_options = [p for p in avail_recv if p[0] != c1]
+    c2 = st.selectbox("Choose second counter player", [p[0] for p in c2_options], key=f"{receiver}_2")
 
     if st.button("✅ Lock In Match"):
         counter_pair = [p for p in pool_recv if p[0] in (c1, c2)]
@@ -130,7 +123,6 @@ if p1 and p2:
             'counter': counter_pair
         })
         st.session_state.round += 1
-        st.session_state.changed = True
-        st.stop()
+        st.rerun()
 
 
