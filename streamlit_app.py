@@ -24,16 +24,16 @@ if 'matchups' not in st.session_state:
 if 'changed' not in st.session_state:
     st.session_state.changed = False
 
-# Safe rerun handling
+# Prevent early rerun errors; rerun is now handled after user actions
 if st.session_state.changed:
     st.session_state.changed = False
-    st.experimental_rerun()
+    st.stop()
 
 # ========== HELPER FUNCTIONS ==========
 def get_available(pool, used):
     return [p for p in pool if p[0] not in used]
 
-def pairing_score(pair_sent, pair_counter, alpha=1.0, beta=0.75):
+def pairing_score(pair_sent, pair_counter, alpha=1.0, beta=0.5):
     avg_sent = sum(p[1] for p in pair_sent) / 2
     avg_counter = sum(p[1] for p in pair_counter) / 2
     avg_diff = abs(avg_sent - avg_counter)
@@ -76,7 +76,7 @@ if st.session_state.round > 4:
     if st.button("🔁 Reset Draft"):
         for key in ['used_a', 'used_b', 'round', 'matchups', 'changed']:
             st.session_state.pop(key, None)
-        st.experimental_rerun()
+        st.rerun()
     st.stop()
 
 # Determine which team sends first this round
@@ -132,4 +132,5 @@ if p1 and p2:
         st.session_state.round += 1
         st.session_state.changed = True
         st.stop()
+
 
