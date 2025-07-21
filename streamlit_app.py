@@ -1,7 +1,7 @@
 import streamlit as st
 from itertools import combinations
 
-# ========== DATA SETUP ==========
+# ========== PLAYER DATA ==========
 team_a = [
     ('Farley', 19), ('Fil', 28.7), ('Sean', 1.4), ('Tom', 14.2),
     ('Alexandra', 9.4), ('Pail', 22.3), ('Greg', 13.7), ('Zimmel', 20.6)
@@ -12,7 +12,7 @@ team_b = [
     ('Ribs McClure', 17.9), ('Bman', 3.8)
 ]
 
-# ========== SESSION STATE ==========
+# ========== SESSION STATE SETUP ==========
 if 'used_a' not in st.session_state:
     st.session_state.used_a = set()
 if 'used_b' not in st.session_state:
@@ -21,12 +21,19 @@ if 'round' not in st.session_state:
     st.session_state.round = 1
 if 'matchups' not in st.session_state:
     st.session_state.matchups = []
+if 'changed' not in st.session_state:
+    st.session_state.changed = False
 
-# ========== HELPERS ==========
+# Safe rerun handling
+if st.session_state.changed:
+    st.session_state.changed = False
+    st.experimental_rerun()
+
+# ========== HELPER FUNCTIONS ==========
 def get_available(pool, used):
     return [p for p in pool if p[0] not in used]
 
-def pairing_score(pair_sent, pair_counter, alpha=1.0, beta=0.75):
+def pairing_score(pair_sent, pair_counter, alpha=1.0, beta=0.5):
     avg_sent = sum(p[1] for p in pair_sent) / 2
     avg_counter = sum(p[1] for p in pair_counter) / 2
     avg_diff = abs(avg_sent - avg_counter)
@@ -56,20 +63,23 @@ def get_best_counter(sent, pool, used):
 def format_pair(pair):
     return f"{pair[0][0]} ({pair[0][1]}) + {pair[1][0]} ({pair[1][1]})"
 
-# ========== UI ==========
+# ========== MAIN UI ==========
 st.title("🏌️ Golf Trip Draft Pairing Optimizer")
 st.subheader(f"Match {st.session_state.round} of 4")
 
 if st.session_state.round > 4:
     st.success("✅ All 4 matches locked in!")
     for i, match in enumerate(st.session_state.matchups, 1):
-        st.markdown(f"**Match {i}**")
-        st.write(f"🔹 {match['sender_team']} sent: {format_pair(match['sent'])}")
-        st.write(f"🔸 {match['counter_team']} countered with: {format_pair(match['counter'])}")
-    st.button("🔁 Reset Draft", on_click=lambda: [st.session_state.clear()])
+        st.markdown(f"### Match {i}")
+        st.write(f"🔹 **{match['sender_team']}** sent: {format_pair(match['sent'])}")
+        st.write(f"🔸 **{match['counter_team']}** countered: {format_pair(match['counter'])}")
+    if st.button("🔁 Reset Draft"):
+        for key in ['used_a', 'used_b', 'round', 'matchups', 'changed']:
+            st.session_state.pop(key, None)
+        st.experimental_rerun()
     st.stop()
 
-# Who sends this round?
+# Determine which team sends first this round
 sender = "Atown" if st.session_state.round % 2 == 1 else "Pittsburgh"
 receiver = "Pittsburgh" if sender == "Atown" else "Atown"
 
@@ -78,7 +88,8 @@ pool_recv = team_b if sender == "Atown" else team_a
 used_send = st.session_state.used_a if sender == "Atown" else st.session_state.used_b
 used_recv = st.session_state.used_b if sender == "Atown" else st.session_state.used_a
 
-st.markdown(f"**{sender} sends out a pairing**")
+# SENDING TEAM SELECTION
+st.markdown(f"### {sender} - Send Out a Pairing")
 avail_send = get_available(pool_send, used_send)
 p1 = st.selectbox("Choose first player", [p[0] for p in avail_send], key=f"{sender}_1")
 p2_options = [p[0] for p in avail_send if p[0] != p1]
@@ -86,14 +97,17 @@ p2 = st.selectbox("Choose second player", p2_options, key=f"{sender}_2")
 
 if p1 and p2:
     sent_pair = [p for p in pool_send if p[0] in (p1, p2)]
-    st.markdown(f"### {receiver} Suggested Counter Pairing")
+
+    # SUGGESTED COUNTER
+    st.markdown(f"### {receiver} - Suggested Counter Pairing")
     suggested = get_best_counter(sent_pair, pool_recv, used_recv)
     if suggested:
         st.write(format_pair(suggested))
     else:
-        st.warning("No counter pairings available.")
+        st.warning("No valid counter pairings remaining.")
 
-    st.markdown(f"**Override {receiver}'s counter?**")
+    # MANUAL OVERRIDE
+    st.markdown(f"### {receiver} - Override or Confirm Counter Pairing")
     avail_recv = get_available(pool_recv, used_recv)
     c1 = st.selectbox("Choose first counter player", [p[0] for p in avail_recv], key=f"{receiver}_1")
     c2_options = [p[0] for p in avail_recv if p[0] != c1]
@@ -101,8 +115,14 @@ if p1 and p2:
 
     if st.button("✅ Lock In Match"):
         counter_pair = [p for p in pool_recv if p[0] in (c1, c2)]
-        st.session_state.used_a.update([p[0] for p in sent_pair]) if sender == "Atown" else st.session_state.used_b.update([p[0] for p in sent_pair])
-        st.session_state.used_b.update([p[0] for p in counter_pair]) if receiver == "Pittsburgh" else st.session_state.used_a.update([p[0] for p in counter_pair])
+
+        if sender == "Atown":
+            st.session_state.used_a.update([p[0] for p in sent_pair])
+            st.session_state.used_b.update([p[0] for p in counter_pair])
+        else:
+            st.session_state.used_b.update([p[0] for p in sent_pair])
+            st.session_state.used_a.update([p[0] for p in counter_pair])
+
         st.session_state.matchups.append({
             'sender_team': sender,
             'sent': sent_pair,
@@ -110,4 +130,6 @@ if p1 and p2:
             'counter': counter_pair
         })
         st.session_state.round += 1
-        st.experimental_rerun()
+        st.session_state.changed = True
+        st.stop()
+
