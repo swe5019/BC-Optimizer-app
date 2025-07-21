@@ -33,7 +33,7 @@ if st.session_state.changed:
 def get_available(pool, used):
     return [p for p in pool if p[0] not in used]
 
-def pairing_score(pair_sent, pair_counter, alpha=1.0, beta=0.5):
+def pairing_score(pair_sent, pair_counter, alpha=1.0, beta=0.75):
     avg_sent = sum(p[1] for p in pair_sent) / 2
     avg_counter = sum(p[1] for p in pair_counter) / 2
     avg_diff = abs(avg_sent - avg_counter)
