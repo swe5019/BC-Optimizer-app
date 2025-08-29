@@ -3,13 +3,13 @@ from itertools import combinations
 
 # ========== PLAYER DATA ==========
 team_a = [
-    ('Farley', 19), ('Fil', 28.7), ('Sean', 1.4), ('Tom', 14.2),
-    ('Alexandra', 9.4), ('Pail', 22.3), ('Greg', 13.7), ('Zimmel', 20.6)
+    ('Farley', 19), ('Fil', 29.1), ('Sean', 0.2), ('Tom', 14.2),
+    ('Alexandra', 9.5), ('Pail', 21.7), ('Greg', 13.7), ('Zimmel', 20.6)
 ]
 team_b = [
-    ('Adawg Maize', 12.6), ('Beans Kujava', 16.3), ('Jerry Curl', 13.3),
-    ('Pat Swag', 16.9), ('Dmac', 5.7), ('Oobs', 11.9),
-    ('Ribs McClure', 17.9), ('Bman', 3.8)
+    ('Adawg Maize', 12.9), ('Beans Kujava', 16.4), ('Jerry Curl', 13.7),
+    ('Pat Swag', 16.0), ('Dmac', 6.1), ('Oobs', 12.8),
+    ('Ribs McClure', 17.6), ('Bman', 4.1)
 ]
 
 # ========== SESSION STATE SETUP ==========
