@@ -1,119 +1,186 @@
 import streamlit as st
-from itertools import combinations
+import itertools
+import pandas as pd
 
-# ========== PLAYER DATA ==========
+st.set_page_config(page_title="Golf Trip Match Optimizer", layout="wide")
+
+# ---------- PLAYER DATA ----------
 team_a = [
-    ('Farley', 19), ('Fil', 29.1), ('Sean', 0.2), ('Tom', 14.2),
-    ('Alexandra', 9.5), ('Pail', 21.7), ('Greg', 13.7), ('Zimmel', 20.6)
+    ('Farley', 19.3), ('Fil', 28.4), ('Sean', -0.5), ('Tom', 13.9),
+    ('Smith', 9.2), ('Paul', 19.2), ('Greg', 12.4), ('Zimmel', 20.6)
 ]
 team_b = [
-    ('Adawg Maize', 12.9), ('Beans Kujava', 16.4), ('Jerry Curl', 13.7),
-    ('Pat Swag', 16.0), ('Dmac', 6.1), ('Oobs', 12.8),
-    ('Ribs McClure', 17.6), ('Bman', 4.1)
+    ('Maize', 13.4), ('Kuj', 16.0), ('Jerry', 13.3),
+    ('Pat', 15.6), ('Dave', 6.1), ('Oobs', 11.5),
+    ('Ben', 19.0), ('Boardman', 4.3)
 ]
 
-# ========== SESSION STATE SETUP ==========
-if 'used_a' not in st.session_state:
-    st.session_state.used_a = set()
-if 'used_b' not in st.session_state:
-    st.session_state.used_b = set()
-if 'round' not in st.session_state:
-    st.session_state.round = 1
-if 'matchups' not in st.session_state:
-    st.session_state.matchups = []
+# ---------- STATE ----------
+if "matches" not in st.session_state:
+    st.session_state.matches = []
+if "remaining_a" not in st.session_state:
+    st.session_state.remaining_a = team_a.copy()
+if "remaining_b" not in st.session_state:
+    st.session_state.remaining_b = team_b.copy()
 
-# ========== HELPER FUNCTIONS ==========
-def get_available(pool, used):
-    return [p for p in pool if p[0] not in used]
+# ---------- FUNCTIONS ----------
+def pairing_score(pair, balance_weight):
+    h1, h2 = pair[0][1], pair[1][1]
+    # Balance score: closer handicaps get higher score
+    balance = 1 - abs(h1 - h2) / 36
+    return balance_weight * balance
 
-def pairing_score(pair_sent, pair_counter, alpha=2.0, beta=0.2):
-    # Strongly punish poor handicap matchups
-    avg_sent = sum(p[1] for p in pair_sent) / 2
-    avg_counter = sum(p[1] for p in pair_counter) / 2
-    avg_diff_sq = (avg_sent - avg_counter) ** 2
-    balance = abs(pair_counter[0][1] - pair_counter[1][1])
-    return alpha * avg_diff_sq + beta * balance
+def matchup_score(pair_a, pair_b):
+    avg_a = (pair_a[0][1] + pair_a[1][1]) / 2
+    avg_b = (pair_b[0][1] + pair_b[1][1]) / 2
+    # Matchup score: smaller difference between averages gets higher score
+    return 1 - abs(avg_a - avg_b) / 36
 
-def get_best_counter(sent, pool, used):
-    best_score = float('inf')
-    best = None
-    for a, b in combinations(get_available(pool, used), 2):
-        score = pairing_score(sent, (a, b))
-        if score < best_score:
+def best_pair(team, remaining, balance_weight):
+    best_combo = None
+    best_score = -1
+    for pair in itertools.combinations(remaining, 2):
+        score = pairing_score(pair, balance_weight)
+        if score > best_score:
             best_score = score
-            best = (a, b)
-    return best
+            best_combo = pair
+    return best_combo
 
-def format_pair(pair):
-    return f"{pair[0][0]} ({pair[0][1]}) + {pair[1][0]} ({pair[1][1]})"
+def best_counter_pair(first_pair, remaining, balance_weight):
+    best_combo = None
+    best_score = -1
+    for pair in itertools.combinations(remaining, 2):
+        score = matchup_score(first_pair, pair) + pairing_score(pair, balance_weight)
+        if score > best_score:
+            best_score = score
+            best_combo = pair
+    return best_combo
 
-# ========== MAIN UI ==========
-st.title("🏌️ Golf Trip Draft Pairing Optimizer")
-st.subheader(f"Match {st.session_state.round} of 4")
+def remove_players(remaining, pair):
+    return [p for p in remaining if p not in pair]
 
-if st.session_state.round > 4:
-    st.success("✅ All 4 matches locked in!")
-    for i, match in enumerate(st.session_state.matchups, 1):
-        st.markdown(f"### Match {i}")
-        st.write(f"🔹 **{match['sender_team']}** sent: {format_pair(match['sent'])}")
-        st.write(f"🔸 **{match['counter_team']}** countered: {format_pair(match['counter'])}")
-    if st.button("🔁 Reset Draft"):
-        for key in ['used_a', 'used_b', 'round', 'matchups']:
-            st.session_state.pop(key, None)
-        st.rerun()
-    st.stop()
+# ---------- SIDEBAR ----------
+st.sidebar.header("⚙️ Settings")
+balance_weight = st.sidebar.slider(
+    "⚖️ Balance vs Matchup Weight",
+    0.0, 1.0, 0.5, 0.1,
+    help="0.0 = favor handicap advantage, 1.0 = favor balanced pairings"
+)
+if st.sidebar.button("🔁 Reset Draft"):
+    st.session_state.matches = []
+    st.session_state.remaining_a = team_a.copy()
+    st.session_state.remaining_b = team_b.copy()
+    st.rerun()
 
-# Determine which team sends first this round
-sender = "Atown" if st.session_state.round % 2 == 1 else "Pittsburgh"
-receiver = "Pittsburgh" if sender == "Atown" else "Atown"
+# ---------- MAIN TITLE ----------
+st.title("🏌️ Golf Trip Match Optimizer")
 
-pool_send = team_a if sender == "Atown" else team_b
-pool_recv = team_b if sender == "Atown" else team_a
-used_send = st.session_state.used_a if sender == "Atown" else st.session_state.used_b
-used_recv = st.session_state.used_b if sender == "Atown" else st.session_state.used_a
+round_num = len(st.session_state.matches) + 1
+if round_num <= 4:
+    st.markdown(f"### Round {round_num}")
 
-# SENDING TEAM SELECTION
-st.markdown(f"### {sender} - Send Out a Pairing")
-avail_send = get_available(pool_send, used_send)
-p1 = st.selectbox("Choose first player", [p[0] for p in avail_send], key=f"{sender}_1")
-p2_options = [p for p in avail_send if p[0] != p1]
-p2 = st.selectbox("Choose second player", [p[0] for p in p2_options], key=f"{sender}_2")
+    # Select who picks first
+    first_picker = st.radio("Who picks first this match?", ["Atown (Kelly Green)", "Pittsburgh (Orange)"], horizontal=True)
 
-if p1 and p2:
-    sent_pair = [p for p in pool_send if p[0] in (p1, p2)]
+    col1, col2 = st.columns(2)
 
-    # SUGGESTED COUNTER
-    st.markdown(f"### {receiver} - Suggested Counter Pairing")
-    suggested = get_best_counter(sent_pair, pool_recv, used_recv)
-    if suggested:
-        st.write(format_pair(suggested))
-    else:
-        st.warning("No valid counter pairings remaining.")
-
-    # MANUAL OVERRIDE
-    st.markdown(f"### {receiver} - Override or Confirm Counter Pairing")
-    avail_recv = get_available(pool_recv, used_recv)
-    c1 = st.selectbox("Choose first counter player", [p[0] for p in avail_recv], key=f"{receiver}_1")
-    c2_options = [p for p in avail_recv if p[0] != c1]
-    c2 = st.selectbox("Choose second counter player", [p[0] for p in c2_options], key=f"{receiver}_2")
-
-    if st.button("✅ Lock In Match"):
-        counter_pair = [p for p in pool_recv if p[0] in (c1, c2)]
-
-        if sender == "Atown":
-            st.session_state.used_a.update([p[0] for p in sent_pair])
-            st.session_state.used_b.update([p[0] for p in counter_pair])
+    with col1:
+        if first_picker.startswith("Atown"):
+            st.markdown("### 🟢 Atown First Pick")
+            suggested_first = best_pair("Atown", st.session_state.remaining_a, balance_weight)
+            st.write(
+                f"**Recommended Pair:** {suggested_first[0][0]} ({suggested_first[0][1]}), "
+                f"{suggested_first[1][0]} ({suggested_first[1][1]})"
+            )
+            manual_first = st.text_input("Manual Override (comma-separated, e.g. Farley, Tom)", "")
         else:
-            st.session_state.used_b.update([p[0] for p in sent_pair])
-            st.session_state.used_a.update([p[0] for p in counter_pair])
+            st.markdown("### 🟠 Pittsburgh First Pick")
+            suggested_first = best_pair("Pittsburgh", st.session_state.remaining_b, balance_weight)
+            st.write(
+                f"**Recommended Pair:** {suggested_first[0][0]} ({suggested_first[0][1]}), "
+                f"{suggested_first[1][0]} ({suggested_first[1][1]})"
+            )
+            manual_first = st.text_input("Manual Override (comma-separated, e.g. Bman, Dmac)", "")
 
-        st.session_state.matchups.append({
-            'sender_team': sender,
-            'sent': sent_pair,
-            'counter_team': receiver,
-            'counter': counter_pair
-        })
-        st.session_state.round += 1
+    with col2:
+        if first_picker.startswith("Atown"):
+            suggested_counter = best_counter_pair(suggested_first, st.session_state.remaining_b, balance_weight)
+            st.markdown("### 🟠 Pittsburgh Counter Pick")
+            st.write(
+                f"**Recommended Counter:** {suggested_counter[0][0]} ({suggested_counter[0][1]}), "
+                f"{suggested_counter[1][0]} ({suggested_counter[1][1]})"
+            )
+            manual_counter = st.text_input("Manual Override (comma-separated, e.g. Oobs, Beans Kujava)", "")
+        else:
+            suggested_counter = best_counter_pair(suggested_first, st.session_state.remaining_a, balance_weight)
+            st.markdown("### 🟢 Atown Counter Pick")
+            st.write(
+                f"**Recommended Counter:** {suggested_counter[0][0]} ({suggested_counter[0][1]}), "
+                f"{suggested_counter[1][0]} ({suggested_counter[1][1]})"
+            )
+            manual_counter = st.text_input("Manual Override (comma-separated, e.g. Greg, Farley)", "")
+
+    if st.button("✅ Lock in Match"):
+        if manual_first:
+            first_names = [x.strip() for x in manual_first.split(",")]
+            if first_picker.startswith("Atown"):
+                suggested_first = [p for p in st.session_state.remaining_a if p[0] in first_names]
+            else:
+                suggested_first = [p for p in st.session_state.remaining_b if p[0] in first_names]
+        if manual_counter:
+            counter_names = [x.strip() for x in manual_counter.split(",")]
+            if first_picker.startswith("Atown"):
+                suggested_counter = [p for p in st.session_state.remaining_b if p[0] in counter_names]
+            else:
+                suggested_counter = [p for p in st.session_state.remaining_a if p[0] in counter_names]
+
+        st.session_state.matches.append((first_picker, suggested_first, suggested_counter))
+        if first_picker.startswith("Atown"):
+            st.session_state.remaining_a = remove_players(st.session_state.remaining_a, suggested_first)
+            st.session_state.remaining_b = remove_players(st.session_state.remaining_b, suggested_counter)
+        else:
+            st.session_state.remaining_b = remove_players(st.session_state.remaining_b, suggested_first)
+            st.session_state.remaining_a = remove_players(st.session_state.remaining_a, suggested_counter)
         st.rerun()
+
+else:
+    st.success("✅ All 4 matches locked in!")
+
+# ---------- DISPLAY CURRENT MATCHES ----------
+st.markdown("---")
+st.markdown("## 📋 Match Summary")
+for i, (first_picker, first_pair, counter_pair) in enumerate(st.session_state.matches, 1):
+    st.markdown(f"**Match {i}:** {first_picker}")
+    if first_picker.startswith("Atown"):
+        st.markdown(
+            f"<span style='color:#00A86B;font-weight:bold'>Atown:</span> "
+            f"{first_pair[0][0]} ({first_pair[0][1]}), {first_pair[1][0]} ({first_pair[1][1]})",
+            unsafe_allow_html=True)
+        st.markdown(
+            f"<span style='color:#FF6600;font-weight:bold'>Pittsburgh:</span> "
+            f"{counter_pair[0][0]} ({counter_pair[0][1]}), {counter_pair[1][0]} ({counter_pair[1][1]})",
+            unsafe_allow_html=True)
+    else:
+        st.markdown(
+            f"<span style='color:#FF6600;font-weight:bold'>Pittsburgh:</span> "
+            f"{first_pair[0][0]} ({first_pair[0][1]}), {first_pair[1][0]} ({first_pair[1][1]})",
+            unsafe_allow_html=True)
+        st.markdown(
+            f"<span style='color:#00A86B;font-weight:bold'>Atown:</span> "
+            f"{counter_pair[0][0]} ({counter_pair[0][1]}), {counter_pair[1][0]} ({counter_pair[1][1]})",
+            unsafe_allow_html=True)
+
+# ---------- REMAINING PLAYERS ----------
+st.markdown("---")
+colA, colB = st.columns(2)
+with colA:
+    st.markdown("### 🟢 Remaining Atown Players")
+    df_a = pd.DataFrame(st.session_state.remaining_a, columns=["Player", "Handicap"])
+    st.table(df_a)
+with colB:
+    st.markdown("### 🟠 Remaining Pittsburgh Players")
+    df_b = pd.DataFrame(st.session_state.remaining_b, columns=["Player", "Handicap"])
+    st.table(df_b)
+
 
 
