@@ -42,10 +42,18 @@ def stroke_advantage_for_team(your_pair, opp_pair):
     """Positive means your_pair gets strokes (opponent avg higher)."""
     return avg_hcp(opp_pair) - avg_hcp(your_pair)
 
+# --- NEW: smarter first-pair logic aware of remaining player pool ---
 def best_pair(remaining, balance_weight):
+    avg_pool = sum(p[1] for p in remaining) / len(remaining)
     best_combo, best_score = None, -1e9
     for pair in itertools.combinations(remaining, 2):
-        score = pairing_balance_score(pair) * balance_weight
+        avg = avg_hcp(pair)
+        balance = pairing_balance_score(pair)
+        deviation = abs(pair[0][1] - avg_pool) + abs(pair[1][1] - avg_pool)
+        # stroke potential (higher avg = more strokes)
+        stroke_factor = avg / 36
+        # Score balances internal pairing, stroke advantage, and future roster balance
+        score = (1 - balance_weight) * (stroke_factor - deviation / 72) + balance_weight * balance
         if score > best_score:
             best_combo, best_score = pair, score
     return best_combo
@@ -68,7 +76,6 @@ def pair_to_names(pair):
     return f"{pair[0][0]} ({pair[0][1]})  +  {pair[1][0]} ({pair[1][1]})"
 
 def stroke_summary_line(pair_a, pair_b, left_label="Atown", right_label="Pittsburgh"):
-    """Show total stroke advantage for both sides."""
     a_gets = stroke_advantage_for_team(pair_a, pair_b)
     b_gets = stroke_advantage_for_team(pair_b, pair_a)
     a_color = ATOWN_COLOR if a_gets >= 0 else "#CC0000"
@@ -102,25 +109,21 @@ if round_num <= 4:
     # ===== FIRST PICK =====
     with col1:
         if first_picker.startswith("Atown"):
-            st.markdown(f"### 🟢 Atown First Pick")
+            st.markdown("### 🟢 Atown First Pick")
             suggested_first = best_pair(st.session_state.remaining_a, balance_weight)
             st.write(f"**Recommended Pair:** {pair_to_names(suggested_first)}")
-            manual_first = st.multiselect(
-                "Manual Override (optional)",
+            manual_first = st.multiselect("Manual Override (optional)",
                 [p[0] for p in st.session_state.remaining_a],
-                max_selections=2, placeholder="Select 2 Atown players..."
-            )
-            first_pair = [p for p in st.session_state.remaining_a if p[0] in manual_first] if len(manual_first) == 2 else list(suggested_first)
+                max_selections=2, placeholder="Select 2 Atown players...")
+            first_pair = [p for p in st.session_state.remaining_a if p[0] in manual_first] if len(manual_first)==2 else list(suggested_first)
         else:
-            st.markdown(f"### 🟠 Pittsburgh First Pick")
+            st.markdown("### 🟠 Pittsburgh First Pick")
             suggested_first = best_pair(st.session_state.remaining_b, balance_weight)
             st.write(f"**Recommended Pair:** {pair_to_names(suggested_first)}")
-            manual_first = st.multiselect(
-                "Manual Override (optional)",
+            manual_first = st.multiselect("Manual Override (optional)",
                 [p[0] for p in st.session_state.remaining_b],
-                max_selections=2, placeholder="Select 2 Pittsburgh players..."
-            )
-            first_pair = [p for p in st.session_state.remaining_b if p[0] in manual_first] if len(manual_first) == 2 else list(suggested_first)
+                max_selections=2, placeholder="Select 2 Pittsburgh players...")
+            first_pair = [p for p in st.session_state.remaining_b if p[0] in manual_first] if len(manual_first)==2 else list(suggested_first)
 
     # ===== COUNTER PICK =====
     with col2:
@@ -128,29 +131,26 @@ if round_num <= 4:
             st.markdown("### 🟠 Pittsburgh Counter Pick")
             suggested_counter = best_counter_pair(first_pair, st.session_state.remaining_b, balance_weight)
             st.write(f"**Recommended Counter:** {pair_to_names(suggested_counter)}")
-            manual_counter = st.multiselect(
-                "Manual Override (optional)",
+            manual_counter = st.multiselect("Manual Override (optional)",
                 [p[0] for p in st.session_state.remaining_b],
-                max_selections=2, placeholder="Select 2 Pittsburgh players..."
-            )
-            counter_pair = [p for p in st.session_state.remaining_b if p[0] in manual_counter] if len(manual_counter) == 2 else list(suggested_counter)
+                max_selections=2, placeholder="Select 2 Pittsburgh players...")
+            counter_pair = [p for p in st.session_state.remaining_b if p[0] in manual_counter] if len(manual_counter)==2 else list(suggested_counter)
             st.markdown("#### Matchup Summary")
-            st.write(f"**Atown Avg HCP:** {avg_hcp(first_pair):.2f}   |   **Pittsburgh Avg HCP:** {avg_hcp(counter_pair):.2f}")
+            st.write(f"**Atown Avg HCP:** {avg_hcp(first_pair):.2f} | **Pittsburgh Avg HCP:** {avg_hcp(counter_pair):.2f}")
             st.markdown(stroke_summary_line(first_pair, counter_pair, "Atown", "Pittsburgh"), unsafe_allow_html=True)
         else:
             st.markdown("### 🟢 Atown Counter Pick")
             suggested_counter = best_counter_pair(first_pair, st.session_state.remaining_a, balance_weight)
             st.write(f"**Recommended Counter:** {pair_to_names(suggested_counter)}")
-            manual_counter = st.multiselect(
-                "Manual Override (optional)",
+            manual_counter = st.multiselect("Manual Override (optional)",
                 [p[0] for p in st.session_state.remaining_a],
-                max_selections=2, placeholder="Select 2 Atown players..."
-            )
-            counter_pair = [p for p in st.session_state.remaining_a if p[0] in manual_counter] if len(manual_counter) == 2 else list(suggested_counter)
+                max_selections=2, placeholder="Select 2 Atown players...")
+            counter_pair = [p for p in st.session_state.remaining_a if p[0] in manual_counter] if len(manual_counter)==2 else list(suggested_counter)
             st.markdown("#### Matchup Summary")
-            st.write(f"**Pittsburgh Avg HCP:** {avg_hcp(first_pair):.2f}   |   **Atown Avg HCP:** {avg_hcp(counter_pair):.2f}")
+            st.write(f"**Pittsburgh Avg HCP:** {avg_hcp(first_pair):.2f} | **Atown Avg HCP:** {avg_hcp(counter_pair):.2f}")
             st.markdown(stroke_summary_line(counter_pair, first_pair, "Atown", "Pittsburgh"), unsafe_allow_html=True)
 
+    # ===== LOCK MATCH =====
     if st.button("✅ Lock in Match"):
         if first_picker.startswith("Atown"):
             st.session_state.matches.append(("Atown first", first_pair, counter_pair))
@@ -172,12 +172,12 @@ for i, (who_first, first_pair, counter_pair) in enumerate(st.session_state.match
     if who_first.startswith("Atown"):
         st.markdown(f"<span style='color:{ATOWN_COLOR};font-weight:700'>Atown:</span> {pair_to_names(first_pair)}", unsafe_allow_html=True)
         st.markdown(f"<span style='color:{PITT_COLOR};font-weight:700'>Pittsburgh:</span> {pair_to_names(counter_pair)}", unsafe_allow_html=True)
-        st.write(f"**Atown Avg:** {avg_hcp(first_pair):.2f}  |  **Pittsburgh Avg:** {avg_hcp(counter_pair):.2f}")
+        st.write(f"**Atown Avg:** {avg_hcp(first_pair):.2f} | **Pittsburgh Avg:** {avg_hcp(counter_pair):.2f}")
         st.markdown(stroke_summary_line(first_pair, counter_pair, "Atown", "Pittsburgh"), unsafe_allow_html=True)
     else:
         st.markdown(f"<span style='color:{PITT_COLOR};font-weight:700'>Pittsburgh:</span> {pair_to_names(first_pair)}", unsafe_allow_html=True)
         st.markdown(f"<span style='color:{ATOWN_COLOR};font-weight:700'>Atown:</span> {pair_to_names(counter_pair)}", unsafe_allow_html=True)
-        st.write(f"**Pittsburgh Avg:** {avg_hcp(first_pair):.2f}  |  **Atown Avg:** {avg_hcp(counter_pair):.2f}")
+        st.write(f"**Pittsburgh Avg:** {avg_hcp(first_pair):.2f} | **Atown Avg:** {avg_hcp(counter_pair):.2f}")
         st.markdown(stroke_summary_line(counter_pair, first_pair, "Atown", "Pittsburgh"), unsafe_allow_html=True)
 
 # ---------- REMAINING PLAYERS ----------
