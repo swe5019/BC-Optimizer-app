@@ -39,8 +39,8 @@ def matchup_evenness_score(pair_a, pair_b):
     return 1 - abs(avg_hcp(pair_a) - avg_hcp(pair_b)) / 36
 
 def stroke_advantage_for_team(your_pair, opp_pair):
-    """Positive means your_pair gets strokes (opponent avg higher)."""
-    return avg_hcp(opp_pair) - avg_hcp(your_pair)
+    """Positive means your_pair gets strokes (higher average handicap)."""
+    return avg_hcp(your_pair) - avg_hcp(opp_pair)
 
 # --- NEW: smarter first-pair logic aware of remaining player pool ---
 def best_pair(remaining, balance_weight):
@@ -50,9 +50,7 @@ def best_pair(remaining, balance_weight):
         avg = avg_hcp(pair)
         balance = pairing_balance_score(pair)
         deviation = abs(pair[0][1] - avg_pool) + abs(pair[1][1] - avg_pool)
-        # stroke potential (higher avg = more strokes)
-        stroke_factor = avg / 36
-        # Score balances internal pairing, stroke advantage, and future roster balance
+        stroke_factor = avg / 36  # higher avg = more strokes potential
         score = (1 - balance_weight) * (stroke_factor - deviation / 72) + balance_weight * balance
         if score > best_score:
             best_combo, best_score = pair, score
@@ -80,8 +78,8 @@ def stroke_summary_line(pair_a, pair_b, left_label="Atown", right_label="Pittsbu
     b_gets = stroke_advantage_for_team(pair_b, pair_a)
     a_color = ATOWN_COLOR if a_gets >= 0 else "#CC0000"
     b_color = PITT_COLOR  if b_gets >= 0 else "#CC0000"
-    a_text = f"<span style='color:{a_color};font-weight:600'>{left_label} {'gets' if a_gets >= 0 else 'gives'} {a_gets:.2f} strokes</span>"
-    b_text = f"<span style='color:{b_color};font-weight:600'>{right_label} {'gets' if b_gets >= 0 else 'gives'} {b_gets:.2f} strokes</span>"
+    a_text = f"<span style='color:{a_color};font-weight:600'>{left_label} {'gets' if a_gets >= 0 else 'gives'} {abs(a_gets):.2f} strokes</span>"
+    b_text = f"<span style='color:{b_color};font-weight:600'>{right_label} {'gets' if b_gets >= 0 else 'gives'} {abs(b_gets):.2f} strokes</span>"
     return a_text + " • " + b_text
 
 # ---------- SIDEBAR ----------
