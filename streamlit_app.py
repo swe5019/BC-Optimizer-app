@@ -31,7 +31,7 @@ def matchup_evenness_score(pair_a, pair_b):
     return 1 - abs(avg_hcp(pair_a) - avg_hcp(pair_b)) / 36
 
 def stroke_advantage_for_team(your_pair, opp_pair):
-    """Positive means your_pair gets strokes (higher average handicap)."""
+    """Positive means your_pair gets strokes (higher avg handicap)."""
     return avg_hcp(your_pair) - avg_hcp(opp_pair)
 
 def remove_players(remaining, pair):
@@ -91,12 +91,12 @@ with tab1:
 
     st.markdown("### 🏌️ Best Ball Pairings")
     balance_weight = st.sidebar.slider(
-        "⚖️ Balance vs Matchup Weight",
+        "⚖️ Balance vs Matchup Weight (Best Ball)",
         0.0, 1.0, 0.5, 0.1,
         help="0.0 = seek matchup/stroke advantage; 1.0 = prioritize balanced teammates"
     )
 
-    if st.sidebar.button("🔁 Reset Best Ball"):
+    if st.sidebar.button("🔁 Reset Best Ball Matches"):
         st.session_state.matches = []
         st.session_state.remaining_a = team_a.copy()
         st.session_state.remaining_b = team_b.copy()
@@ -135,7 +135,6 @@ with tab1:
                     [p[0] for p in st.session_state.remaining_b],
                     max_selections=2)
                 counter_pair = [p for p in st.session_state.remaining_b if p[0] in manual_counter] if len(manual_counter)==2 else list(suggested_counter)
-                st.write(f"**Atown Avg HCP:** {avg_hcp(first_pair):.2f} | **Pittsburgh Avg HCP:** {avg_hcp(counter_pair):.2f}")
                 st.markdown(stroke_summary_line(first_pair, counter_pair, "Atown", "Pittsburgh"), unsafe_allow_html=True)
             else:
                 st.markdown("### 🟢 Atown Counter Pick")
@@ -145,7 +144,6 @@ with tab1:
                     [p[0] for p in st.session_state.remaining_a],
                     max_selections=2)
                 counter_pair = [p for p in st.session_state.remaining_a if p[0] in manual_counter] if len(manual_counter)==2 else list(suggested_counter)
-                st.write(f"**Pittsburgh Avg HCP:** {avg_hcp(first_pair):.2f} | **Atown Avg HCP:** {avg_hcp(counter_pair):.2f}")
                 st.markdown(stroke_summary_line(counter_pair, first_pair, "Atown", "Pittsburgh"), unsafe_allow_html=True)
 
         if st.button("✅ Lock in Match"):
@@ -161,18 +159,29 @@ with tab1:
     else:
         st.success("✅ All 4 matches locked in!")
 
+    # --- Match summary & totals ---
     st.markdown("---")
-    st.markdown("## 📋 Match Summary")
+    st.markdown("## 📋 Best Ball Match Summary")
+    total_a, total_b = 0, 0
     for i, (who_first, first_pair, counter_pair) in enumerate(st.session_state.matches, 1):
         st.markdown(f"**Match {i}:** {who_first}")
-        if who_first.startswith("Atown"):
-            st.markdown(f"<span style='color:{ATOWN_COLOR};font-weight:700'>Atown:</span> {pair_to_names(first_pair)}", unsafe_allow_html=True)
-            st.markdown(f"<span style='color:{PITT_COLOR};font-weight:700'>Pittsburgh:</span> {pair_to_names(counter_pair)}", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<span style='color:{PITT_COLOR};font-weight:700'>Pittsburgh:</span> {pair_to_names(first_pair)}", unsafe_allow_html=True)
-            st.markdown(f"<span style='color:{ATOWN_COLOR};font-weight:700'>Atown:</span> {pair_to_names(counter_pair)}", unsafe_allow_html=True)
-        st.write(f"**Avg HCP Diff:** {abs(avg_hcp(first_pair)-avg_hcp(counter_pair)):.2f}")
+        st.write(f"{pair_to_names(first_pair)}  vs  {pair_to_names(counter_pair)}")
+        diff = stroke_advantage_for_team(first_pair, counter_pair)
+        total_a += diff
+        total_b -= diff
         st.markdown(stroke_summary_line(first_pair, counter_pair, "Atown", "Pittsburgh"), unsafe_allow_html=True)
+
+    st.markdown(f"### 🧮 Total Stroke Advantage: 🟢 Atown = {total_a:.2f} | 🟠 Pittsburgh = {total_b:.2f}")
+
+    # --- Remaining players ---
+    st.markdown("---")
+    colA, colB = st.columns(2)
+    with colA:
+        st.markdown("### 🟢 Remaining Atown Players")
+        st.table(pd.DataFrame(st.session_state.remaining_a, columns=["Player", "Handicap"]))
+    with colB:
+        st.markdown("### 🟠 Remaining Pittsburgh Players")
+        st.table(pd.DataFrame(st.session_state.remaining_b, columns=["Player", "Handicap"]))
 
 # ===============================================================
 # TAB 2 — SINGLES OPTIMIZER
@@ -184,6 +193,12 @@ with tab2:
         st.session_state.singles_matches = []
         st.session_state.remaining_a_singles = team_a.copy()
         st.session_state.remaining_b_singles = team_b.copy()
+
+    if st.sidebar.button("🔁 Reset Singles Matches"):
+        st.session_state.singles_matches = []
+        st.session_state.remaining_a_singles = team_a.copy()
+        st.session_state.remaining_b_singles = team_b.copy()
+        st.rerun()
 
     def best_single(remaining, balance_weight):
         avg_pool = sum(p[1] for p in remaining) / len(remaining)
@@ -224,49 +239,82 @@ with tab2:
             horizontal=True, key=f"singles_first_{round_num}"
         )
 
-        if first_picker.startswith("Atown"):
-            suggested_first = best_single(st.session_state.remaining_a_singles, balance_weight)
-            st.write(f"🟢 **Atown Recommended:** {suggested_first[0]} ({suggested_first[1]})")
-            first_override = st.selectbox("Manual Override (optional)",
-                [p[0] for p in st.session_state.remaining_a_singles],
-                index=0)
-            first_player = next(p for p in st.session_state.remaining_a_singles if p[0] == first_override)
-            suggested_counter = best_counter_single(first_player, st.session_state.remaining_b_singles, balance_weight)
-            st.write(f"🟠 **Pittsburgh Counter:** {suggested_counter[0]} ({suggested_counter[1]})")
-        else:
-            suggested_first = best_single(st.session_state.remaining_b_singles, balance_weight)
-            st.write(f"🟠 **Pittsburgh Recommended:** {suggested_first[0]} ({suggested_first[1]})")
-            first_override = st.selectbox("Manual Override (optional)",
-                [p[0] for p in st.session_state.remaining_b_singles],
-                index=0)
-            first_player = next(p for p in st.session_state.remaining_b_singles if p[0] == first_override)
-            suggested_counter = best_counter_single(first_player, st.session_state.remaining_a_singles, balance_weight)
-            st.write(f"🟢 **Atown Counter:** {suggested_counter[0]} ({suggested_counter[1]})")
+        col1, col2 = st.columns(2)
+        with col1:
+            if first_picker.startswith("Atown"):
+                suggested_first = best_single(st.session_state.remaining_a_singles, balance_weight)
+                st.markdown(f"### 🟢 Atown First Pick")
+                st.write(f"**Recommended:** {suggested_first[0]} ({suggested_first[1]})")
+                manual_first = st.selectbox("Manual Override (optional)",
+                    [p[0] for p in st.session_state.remaining_a_singles],
+                    index=0)
+                first_player = next(p for p in st.session_state.remaining_a_singles if p[0] == manual_first)
+            else:
+                suggested_first = best_single(st.session_state.remaining_b_singles, balance_weight)
+                st.markdown(f"### 🟠 Pittsburgh First Pick")
+                st.write(f"**Recommended:** {suggested_first[0]} ({suggested_first[1]})")
+                manual_first = st.selectbox("Manual Override (optional)",
+                    [p[0] for p in st.session_state.remaining_b_singles],
+                    index=0)
+                first_player = next(p for p in st.session_state.remaining_b_singles if p[0] == manual_first)
 
-        diff = abs(first_player[1] - suggested_counter[1])
-        higher_gets = "Atown" if first_player[1] > suggested_counter[1] else "Pittsburgh"
+        with col2:
+            if first_picker.startswith("Atown"):
+                suggested_counter = best_counter_single(first_player, st.session_state.remaining_b_singles, balance_weight)
+                st.markdown("### 🟠 Pittsburgh Counter Pick")
+                st.write(f"**Recommended:** {suggested_counter[0]} ({suggested_counter[1]})")
+                manual_counter = st.selectbox("Manual Override (optional)",
+                    [p[0] for p in st.session_state.remaining_b_singles],
+                    index=0)
+                counter_player = next(p for p in st.session_state.remaining_b_singles if p[0] == manual_counter)
+            else:
+                suggested_counter = best_counter_single(first_player, st.session_state.remaining_a_singles, balance_weight)
+                st.markdown("### 🟢 Atown Counter Pick")
+                st.write(f"**Recommended:** {suggested_counter[0]} ({suggested_counter[1]})")
+                manual_counter = st.selectbox("Manual Override (optional)",
+                    [p[0] for p in st.session_state.remaining_a_singles],
+                    index=0)
+                counter_player = next(p for p in st.session_state.remaining_a_singles if p[0] == manual_counter)
+
+        diff = abs(first_player[1] - counter_player[1])
+        higher_gets = "Atown" if first_player[1] > counter_player[1] else "Pittsburgh"
         st.write(f"**Stroke Differential:** {diff:.2f} ({higher_gets} gets strokes)")
 
         if st.button("✅ Lock in Singles Match", key=f"singles_lock_{round_num}"):
-            st.session_state.singles_matches.append((first_picker, first_player, suggested_counter))
+            st.session_state.singles_matches.append((first_picker, first_player, counter_player))
             if first_picker.startswith("Atown"):
                 st.session_state.remaining_a_singles = remove_player(st.session_state.remaining_a_singles, first_player)
-                st.session_state.remaining_b_singles = remove_player(st.session_state.remaining_b_singles, suggested_counter)
+                st.session_state.remaining_b_singles = remove_player(st.session_state.remaining_b_singles, counter_player)
             else:
                 st.session_state.remaining_b_singles = remove_player(st.session_state.remaining_b_singles, first_player)
-                st.session_state.remaining_a_singles = remove_player(st.session_state.remaining_a_singles, suggested_counter)
+                st.session_state.remaining_a_singles = remove_player(st.session_state.remaining_a_singles, counter_player)
             st.rerun()
     else:
         st.success("✅ All 8 singles matches locked in!")
 
+    # --- Singles Summary + Totals ---
     st.markdown("---")
     st.markdown("### Singles Match Summary")
+    total_a, total_b = 0, 0
     for i, (who_first, p1, p2) in enumerate(st.session_state.singles_matches, 1):
         st.write(f"**Match {i}:** {who_first}")
         st.write(f"{p1[0]} ({p1[1]}) vs {p2[0]} ({p2[1]})")
-        diff = abs(p1[1] - p2[1])
-        higher_gets = "Atown" if p1[1] > p2[1] else "Pittsburgh"
-        st.write(f"**Stroke Differential:** {diff:.2f} ({higher_gets} gets strokes)")
+        diff = p1[1] - p2[1]
+        total_a += diff
+        total_b -= diff
+        higher_gets = "Atown" if diff > 0 else "Pittsburgh"
+        st.write(f"**Stroke Differential:** {abs(diff):.2f} ({higher_gets} gets strokes)")
+    st.markdown(f"### 🧮 Total Stroke Advantage: 🟢 Atown = {total_a:.2f} | 🟠 Pittsburgh = {total_b:.2f}")
+
+    # --- Remaining players ---
+    st.markdown("---")
+    colA, colB = st.columns(2)
+    with colA:
+        st.markdown("### 🟢 Remaining Atown Players")
+        st.table(pd.DataFrame(st.session_state.remaining_a_singles, columns=["Player", "Handicap"]))
+    with colB:
+        st.markdown("### 🟠 Remaining Pittsburgh Players")
+        st.table(pd.DataFrame(st.session_state.remaining_b_singles, columns=["Player", "Handicap"]))
 
 
 
