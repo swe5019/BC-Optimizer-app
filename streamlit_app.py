@@ -298,6 +298,13 @@ with tab2:
 with tab3:
     st.markdown("### 📈 All Possible Pairing Rankings")
 
+    # Add its own slider
+    pairings_balance_weight = st.slider(
+        "⚖️ Pairing Rankings Balance vs Matchup Weight",
+        0.0, 1.0, 0.5, 0.1,
+        help="0.0 = focus on stroke/advantage; 1.0 = focus on balanced pairs"
+    )
+
     def rank_pairings(team, team_name):
         avg_pool = sum(p[1] for p in team) / len(team)
         rows = []
@@ -305,12 +312,13 @@ with tab3:
             balance = pairing_balance_score(pair)
             deviation = abs(pair[0][1] - avg_pool) + abs(pair[1][1] - avg_pool)
             avg_h = avg_hcp(pair)
-            score = (1 - balance_weight) * (avg_h / 36 - deviation / 72) + balance_weight * balance
+            score = (1 - pairings_balance_weight) * (avg_h / 36 - deviation / 72) + pairings_balance_weight * balance
             rows.append({
                 "Team": team_name,
                 "Pair": pair_to_names(pair),
                 "Avg Handicap": avg_h,
                 "Balance Score": balance,
+                "Deviation": deviation,
                 "Overall Score": score
             })
         return pd.DataFrame(rows).sort_values("Overall Score", ascending=False)
